@@ -1,0 +1,93 @@
+---
+title: "Movies"
+author: "Ambra"
+date: "February 10, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Querying the 'Movies' database created in MySQL- Data Manipulation Language 
+
+```{r movies}
+library(RMySQL)
+library(dplyr)
+library(reshape)
+library(car)
+library(htmlTable)
+library(sjPlot)
+
+
+myfilm = dbConnect(RMySQL::MySQL(), user='root', password='password', dbname='Movies', host='localhost')
+
+#List All Tables
+dbListTables(myfilm)
+
+#Results fetching names, ratings and movies
+res_sql<- "SELECT firstname, rating, moviename, genre, director FROM people  
+INNER JOIN movierating 
+ON people.nameid = movierating.nameid 
+INNER JOIN movies 
+ON movierating.movieid=movies.movieid ;"
+
+res <- dbGetQuery(myfilm, res_sql)
+
+htmlTable(res, caption = 'Movies db')
+
+#Rank movies by rating
+
+rnks_sql<- "SELECT rating, moviename FROM movies
+INNER JOIN movierating
+ON movierating.movieid=movies.movieid
+GROUP by moviename
+ORDER by avg(rating) desc;"
+
+rnks <- dbGetQuery(myfilm, rnks_sql)
+
+htmlTable(rnks, caption = 'Movies Rank')
+
+#Favorite movies by firstname
+favorite_sql<- "SELECT firstname, moviename, genre, rating FROM people
+INNER JOIN movierating ON people.nameid = movierating.nameid 
+INNER JOIN movies ON movierating.movieid = movies.movieid 
+WHERE rating = 5 ;  "
+
+favorite<- dbGetQuery(myfilm, favorite_sql)
+htmlTable(favorite, caption = 'Movies Rank')
+
+#Likert plot of movies
+
+rating_sql<-"SELECT nameid, moviename, rating FROM movies INNER JOIN movierating ON movierating.movieid=movies.movieid;"
+
+dfrating<-dbGetQuery(myfilm, rating_sql)
+
+#cast observatins into variables to resemble a survey response table
+
+aggrating<-cast(dfrating, nameid ~ moviename, value.var="rating")
+
+
+dim(aggrating)
+#selecting only movies and movierating 
+sjp.setTheme(theme = "539",
+             geom.label.color = "black", 
+             geom.label.size = 2.5,
+             axis.textsize = .8, 
+             axis.title.size = .9,
+             legend.size = .7,
+             legend.item.size = .5)
+set.seed(1)
+
+# Have to invert the scale each time I plot a Likert- still cannot figure out why
+rating1 <- apply(aggrating, 2, function(x) recode(x,"1 = 5; 2 = 4 ; 3 = 3 ; 4 = 2; 5= 1"))
+
+ratingdf<- as.data.frame(rating1)
+
+
+labels <- c("Strongly Like" ,"Like", "Neither Like nor Dislike", "Dislike", "Strongly Dislike")
+
+sjp.likert(cat.neutral = 3, ratingdf, title= "Movies rating", axis.titles= c(" ", "Aggregate Ratings"),  intercept.line.color = "white", values = "sum.outside", show.n = FALSE, show.prc.sign = TRUE, legend.labels = labels, sort.frq = "pos.asc", reverse.colors = TRUE, grid.range = 1.4)
+
+
+```
